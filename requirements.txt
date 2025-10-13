@@ -1,1 +1,1 @@
-python-docx lxml
+python-docx
