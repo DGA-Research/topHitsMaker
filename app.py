@@ -1,4 +1,5 @@
 import io
+import os
 import datetime
 import platform
 import subprocess
@@ -219,8 +220,14 @@ if uploaded is not None:
             bio = io.BytesIO()
             out_doc.save(bio)
             bio.seek(0)
-            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            out_name = f"Formatted Output {ts}.docx"
+
+            # Naming logic: if input name ends with 'INPUT' (case-insensitive), change to 'OUTPUT'.
+            # Otherwise, append '_OUTPUT'.
+            base_name = os.path.splitext(uploaded.name)[0].rstrip()
+            if base_name.upper().endswith("INPUT"):
+                out_name = base_name[:-5] + "OUTPUT.docx"  # replace trailing INPUT with OUTPUT
+            else:
+                out_name = base_name + "_OUTPUT.docx"
 
             st.download_button(
                 label="⬇️ Download reformatted .docx",
@@ -229,7 +236,7 @@ if uploaded is not None:
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
 
-            st.info("Tip: In Word → Styles Pane → right-click **H5Subbullet** → “Select All X Instances” → change bullet to hollow if desired.")
+            st.info("Tip: In Word → Styles Pane → right-click **H5Subbullet** → ‘Select All X Instances’ → change bullet to hollow if desired.")
 
     except Exception as e:
         st.error(f"Error processing document: {e}")
