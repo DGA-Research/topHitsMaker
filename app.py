@@ -236,10 +236,11 @@ if uploaded is not None:
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
             st.caption(
-                "To change the H5 subbullets into hollow bullets: "
-                "1) Open your Styles Pane and click on any H5Subbullet 2) Click the down arrow next to H5Subbullet and select Modify Style"
-                "2) Click the dropdown menu on the bottom where it says “Format” and select “Numbering”"
-                "3) Select the hollow bullet from the options and press Ok "
+                "To change the H5 subbullets into hollow bullets:\n"
+                "1. Open your Styles Pane and click on any H5Subbullet\n"
+                "2. Click the down arrow next to H5Subbullet and select Modify Style\n"
+                "3. Click the dropdown menu at the bottom where it says 'Format' and select Numbering\n"
+                "4. Select the hollow bullet from the options and press OK"
             )
 
     except Exception as e:
