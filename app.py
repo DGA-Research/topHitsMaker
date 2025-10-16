@@ -195,9 +195,9 @@ def transform_docx(src: Document, add_period_to_h4: bool = True) -> Tuple[Docume
 # -----------------------------
 # Streamlit UI
 # -----------------------------
-st.set_page_config(page_title="Key Points Maker", page_icon="📝", layout="centered")
-st.title("📝 Key Points Maker")
-st.caption("Upload a .docx with Heading 2–5 structure. Get back a ‘Key Points’ document.")
+st.set_page_config(page_title="Top Hits Maker", page_icon="📝", layout="centered")
+st.title("📝 Top Hits Maker")
+st.caption("Upload a .docx with Heading 2–5 structure. Get back a ‘Top Hits’ document.")
 
 uploaded = st.file_uploader("Upload your .docx", type=["docx"])
 add_period_to_h4 = st.checkbox("Ensure terminal period on H4 bullets", value=True)
