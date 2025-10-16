@@ -1,4 +1,4 @@
-# Key Points Maker
+# Top Hits Maker
 
 This Streamlit app reformats Word documents that use Heading 2-Heading 5 styles into a concise "Key Points" summary with consistent formatting.
 
