@@ -3,7 +3,7 @@ import os
 import datetime
 import platform
 import subprocess
-from typing import Tuple
+from typing import List, Tuple
 
 import streamlit as st
 from docx import Document
@@ -47,6 +47,57 @@ def ensure_terminal_period(s: str) -> str:
         return s[:-1] + '.' + last
     return s + '.'
 
+
+# -----------------------------
+# Bold detection helpers
+# -----------------------------
+def run_is_bold(run) -> bool:
+    direct = run.bold
+    if direct is not None:
+        return bool(direct)
+    font_level = run.font.bold
+    if font_level is not None:
+        return bool(font_level)
+    style = getattr(run, "style", None)
+    style_font = getattr(style, "font", None)
+    style_bold = getattr(style_font, "bold", None)
+    if style_bold is not None:
+        return bool(style_bold)
+    return False
+
+
+def extract_bold_spans(para):
+    spans = []
+    current = []
+    for run in para.runs:
+        text = run.text or ""
+        if not text:
+            continue
+        if run_is_bold(run):
+            current.append(text)
+        else:
+            if current and not text.strip():
+                current.append(text)
+                continue
+            if current:
+                combined = ''.join(current).strip()
+                if combined:
+                    spans.append(' '.join(combined.split()))
+                current = []
+    if current:
+        combined = ''.join(current).strip()
+        if combined:
+            spans.append(' '.join(combined.split()))
+    return spans
+
+
+def is_list_paragraph(para) -> bool:
+    style_name = getattr(para.style, "name", "")
+    lowered = (style_name or "").lower()
+    if any(token in lowered for token in ("list", "bullet", "number")):
+        return True
+    return False
+
 # -----------------------------
 # Layout helpers
 # -----------------------------
@@ -88,11 +139,41 @@ def add_heading(out: Document, text: str):
     p.paragraph_format.line_spacing = 1.0
     p.paragraph_format.space_before = Pt(0)
     p.paragraph_format.space_after = Pt(0)
-    r = p.add_run((text or "").upper())
+    formatted = to_sentence_case(text)
+    r = p.add_run(formatted)
     r.bold = True
     r.underline = True
     r.font.name = 'Arial'
     r.font.size = Pt(10)
+    _add_visible_blank_line(out)
+
+def add_bold_bullet(out: Document, text: str):
+    cleaned = to_sentence_case(text or "")
+    if not cleaned:
+        return
+    p = out.add_paragraph(style='List Bullet')
+    p.paragraph_format.line_spacing = 1.0
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after = Pt(0)
+    run = p.add_run(cleaned)
+    run.font.name = 'Arial'
+    run.font.size = Pt(10)
+    run.bold = False
+    _add_visible_blank_line(out)
+
+
+def add_bold_subbullet(out: Document, text: str):
+    cleaned = to_sentence_case(text or "")
+    if not cleaned:
+        return
+    p = out.add_paragraph(style='List Bullet 2')
+    p.paragraph_format.line_spacing = 1.0
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after = Pt(0)
+    run = p.add_run(cleaned)
+    run.font.name = 'Arial'
+    run.font.size = Pt(10)
+    run.bold = False
     _add_visible_blank_line(out)
 
 def add_subheading_all_caps(out: Document, text: str):
@@ -100,7 +181,8 @@ def add_subheading_all_caps(out: Document, text: str):
     p.paragraph_format.line_spacing = 1.0
     p.paragraph_format.space_before = Pt(0)
     p.paragraph_format.space_after = Pt(0)
-    r = p.add_run((text or "").upper())
+    formatted = to_sentence_case(text)
+    r = p.add_run(formatted)
     r.bold = False
     r.underline = True
     r.font.name = 'Arial'
@@ -132,7 +214,7 @@ def add_h5_bullet(out: Document, text: str):
         r = p.runs[0]
         r.font.name = 'Arial'
         r.font.size = Pt(10)
-    # Indent: text 0.75" (1080 twips), hanging 0.25" (360) → bullet at 0.5"
+    # Indent: text 0.75" (1080 twips), hanging 0.25" (360) -> bullet at 0.5"
     _set_xml_indent(p, left_twips=1080, hanging_twips=360)
     _add_visible_blank_line(out)
 
@@ -171,7 +253,8 @@ def transform_docx(src: Document, add_period_to_h4: bool = True) -> Tuple[Docume
     base_style.paragraph_format.space_before = Pt(0)
     base_style.paragraph_format.space_after = Pt(0)
 
-    counts = dict(H2=0, H3=0, H4=0, H5=0)
+    counts = dict(H2=0, H3=0, H4=0, H5=0, BOLD=0)
+    h4_context = False
 
     for para in src.paragraphs:
         text = (para.text or "").strip()
@@ -180,80 +263,89 @@ def transform_docx(src: Document, add_period_to_h4: bool = True) -> Tuple[Docume
         level = guess_heading_level(getattr(para.style, "name", ""), text)
         if level == 1:
             add_heading(out, text); counts["H2"] += 1
+            h4_context = False
         elif level == 2:
             add_subheading_all_caps(out, text); counts["H3"] += 1
+            h4_context = False
         elif level == 3:
-            add_bullet(out, text, indent=True, add_period=add_period_to_h4); counts["H4"] += 1
+            add_bullet(out, text, indent=False, add_period=add_period_to_h4); counts["H4"] += 1
+            h4_context = True
         elif level == 4:
             add_h5_bullet(out, text); counts["H5"] += 1
+            h4_context = False
         else:
-            # Ignore non-heading text
-            pass
+            spans = extract_bold_spans(para)
+            if not spans:
+                continue
+            list_paragraph = is_list_paragraph(para)
+            for span in spans:
+                if h4_context or list_paragraph:
+                    add_bold_subbullet(out, span)
+                else:
+                    add_bold_bullet(out, span)
+                counts["BOLD"] += 1
 
     return out, counts
 
 # -----------------------------
 # Streamlit UI
 # -----------------------------
-st.set_page_config(page_title="Top Hits Maker", page_icon="📝", layout="centered")
-st.title("📝 Top Hits Maker")
-st.caption("Upload a .docx with Heading 2–5 structure. Get back a ‘Top Hits’ document.")
+st.set_page_config(page_title="Key Points Maker", page_icon=None, layout="centered")
+st.title("Key Points Maker")
+st.caption(
+    "Upload a Word document that relies on Heading 2 through Heading 5 styles. "
+    "This app extracts those headings and any bold text into a streamlined outline."
+)
 
-uploaded = st.file_uploader("Upload your .docx", type=["docx"])
-add_period_to_h4 = st.checkbox("Ensure terminal period on H4 bullets", value=True)
+uploaded = st.file_uploader("Upload a .docx file", type=["docx"])
+add_period_to_h4 = st.checkbox("Add a period to H4 bullets when missing", value=True)
 
 if uploaded is not None:
     try:
-        # Load source document
         src_doc = Document(uploaded)
-
-        # Transform
         out_doc, counts = transform_docx(src_doc, add_period_to_h4=add_period_to_h4)
 
         total = sum(counts.values())
         if total == 0:
-            st.warning("No H2/H3/H4/H5 content found. Nothing to transform.")
+            st.warning("No Heading 2-5 or bolded content detected. Please check the source document.")
         else:
-            st.success(f"Transformed items — H2: {counts['H2']} • H3: {counts['H3']} • H4: {counts['H4']} • H5: {counts['H5']}")
+            st.success(
+                "Transformed items - "
+                f"H2: {counts['H2']} | "
+                f"H3: {counts['H3']} | "
+                f"H4: {counts['H4']} | "
+                f"H5: {counts['H5']} | "
+                f"Bold bullets: {counts['BOLD']}"
+            )
 
-            # Save to BytesIO
             bio = io.BytesIO()
             out_doc.save(bio)
             bio.seek(0)
 
-            # Naming logic: if input name ends with 'INPUT' (case-insensitive), change to 'OUTPUT'.
-            # Otherwise, append '_OUTPUT'.
             base_name = os.path.splitext(uploaded.name)[0].rstrip()
             if base_name.upper().endswith("INPUT"):
-                out_name = base_name[:-5] + "OUTPUT.docx"  # replace trailing INPUT with OUTPUT
+                out_name = base_name[:-5] + "OUTPUT.docx"
             else:
                 out_name = base_name + "_OUTPUT.docx"
 
             st.download_button(
-                label="⬇️ Download reformatted .docx",
+                label="Download reformatted document",
                 data=bio,
                 file_name=out_name,
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
-            st.caption(
-                "To change the H5 subbullets into hollow bullets:\n"
-                "1. Open your Styles Pane and click on any H5Subbullet\n"
-                "2. Click the down arrow next to H5Subbullet and select Modify Style\n"
-                "3. Click the dropdown menu at the bottom where it says 'Format' and select Numbering\n"
-                "4. Select the hollow bullet from the options and press OK"
-            )
 
-    except Exception as e:
-        st.error(f"Error processing document: {e}")
+    except Exception as exc:
+        st.error(f"Error processing document: {exc}")
         st.stop()
 
-# Footer help
-with st.expander("Help & notes"):
+with st.expander("What the app does"):
     st.markdown(
         """
-- The app looks specifically for **Heading 2–5** styles in the uploaded file.
-- H2 and H3 become ALL-CAPS headings; H4 becomes sentence-case bullets; H5 becomes indented sub-bullets (`H5Subbullet` style).
-- Paragraphs not styled as H2–H5 are ignored on purpose.
-- Everything is formatted in **Arial 10**, single-spaced, with narrow margins (0.5").
+- Converts Heading 2 through Heading 5 text into a Key Points outline.
+- Adds sentence-case bullets for bold text that does not have heading styles.
+- Keeps the output formatted with Arial 10 pt, single spacing, and 0.5 inch margins.
+- Ignores paragraphs that fall outside the targeted heading levels or bold styling.
 """
     )
+
