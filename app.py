@@ -291,7 +291,7 @@ def transform_docx(src: Document, add_period_to_h4: bool = True) -> Tuple[Docume
 # Streamlit UI
 # -----------------------------
 st.set_page_config(page_title="Key Points Maker", page_icon=None, layout="centered")
-st.title("Key Points Maker")
+st.title("(mini) Key Points Maker")
 st.caption(
     "Upload a Word document that relies on Heading 2 through Heading 5 styles. "
     "This app extracts those headings and any bold text into a streamlined outline."
@@ -348,4 +348,5 @@ with st.expander("What the app does"):
 - Ignores paragraphs that fall outside the targeted heading levels or bold styling.
 """
     )
+
 
